@@ -2,8 +2,8 @@
 
 ##  Team Members
 
-* **Your Name**
-* **Teammate Name**
+* **A Vinay-PES1UG24CS647**
+* **B KOUSHIK RAJ-PESIUG24CS657**
 
 ---
 
