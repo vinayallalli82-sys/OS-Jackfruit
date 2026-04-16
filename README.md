@@ -165,15 +165,19 @@ Demonstrates command-line interaction with the runtime for managing containers.
 
 ---
 
-### 5. Soft Limit Trigger
+### 5 & 6. Soft and Hard Memory Limit Enforcement
 
-![Soft Limit](screenshots/Image5.png)
+![Memory Limits](screenshots/Image5.png)
 
-Shows warning generated when memory usage exceeds the soft limit.
+Shows both memory control mechanisms:
+
+* **Soft Limit:** When memory usage exceeds the soft threshold, the system logs a warning message but allows the container to continue running.
+
+* **Hard Limit:** When memory usage exceeds the maximum limit, the container is forcefully terminated by the kernel to prevent excessive resource usage.
 
 ---
 
-### 6. CPU Scheduling
+### 7. CPU Scheduling
 
 ![Scheduling](screenshots/Image7.png)
 
@@ -181,7 +185,7 @@ Demonstrates difference in execution time based on CPU priority (nice values).
 
 ---
 
-### 7. Cleanup / Teardown
+### 8. Cleanup / Teardown
 
 ![Cleanup](screenshots/Image8.png)
 
