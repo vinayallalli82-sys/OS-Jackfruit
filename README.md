@@ -1,47 +1,53 @@
 # OS Jackfruit – Lightweight Container Runtime
 
-##  Team Members
+## Team Members
 
-* **A Vinay-PES1UG24CS647**
-* **B KOUSHIK RAJ-PESIUG24CS657**
+* A Vinay – PES1UG24CS647
+* B Koushik Raj – PES1UG24CS657
 
 ---
 
-##  Project Overview
+## Project Overview
 
-OS Jackfruit is a lightweight container runtime implemented in C.
-It demonstrates core operating system concepts such as:
+OS Jackfruit is a lightweight container runtime implemented in C that demonstrates important operating system concepts through practical implementation.
+
+The project focuses on:
 
 * Process isolation
 * Memory monitoring
 * Resource control using kernel modules
-* Multi-container supervision
+* Multi-container execution
 
-The project consists of a **user-space runtime (`engine.c`)** and a **kernel module (`monitor.c`)** that enforces memory limits.
+It consists of two main components:
+
+* User-space runtime (`engine.c`) which manages container lifecycle
+* Kernel module (`monitor.c`) which monitors and enforces memory limits
+
+This project provides a simplified understanding of how container systems like Docker work internally.
 
 ---
 
-##  Features
+## Features
 
 * Start and manage multiple containers
-* Track container processes
-* Soft memory limit monitoring (logs warning)
-* Hard memory limit enforcement (kills process)
+* Independent execution of container processes
+* Soft memory limit monitoring (warning messages)
+* Hard memory limit enforcement (process termination)
 * CLI interface for container operations
 * Kernel-level memory tracking using RSS
 
 ---
 
-##  Technologies Used
+## Technologies Used
 
 * C Programming
 * Linux Kernel Modules
-* System Calls (`ioctl`, `fork`, `exec`)
-* Ubuntu (Virtual Machine)
+* System Calls (`fork`, `exec`, `ioctl`)
+* Ubuntu Virtual Machine
 
 ---
 
-##  Project Structure
+## Project Structure
 
 ```
 OS-Jackfruit/
@@ -55,12 +61,20 @@ OS-Jackfruit/
 │   ├── Makefile
 │
 ├── screenshots/
+│   ├── Image1.png
+│   ├── Image2.png
+│   ├── Image3.png
+│   ├── Image4.png
+│   ├── Image5.png
+│   ├── Image7.png
+│   ├── Image8.png
+│
 ├── README.md
 ```
 
 ---
 
-##  Modifications Done
+## Modifications Done
 
 ### engine.c
 
@@ -82,7 +96,7 @@ OS-Jackfruit/
 
 ---
 
-##  How to Run
+## How to Run
 
 ### 1. Compile
 
@@ -117,51 +131,116 @@ dmesg | tail
 
 ---
 
-##  Demonstrations
+## Demonstrations
 
 ### 1. Multi-container Execution
 
-![Step1](screenshots/step1.png)
+![Multi-container](screenshots/Image1.png)
+
+Shows multiple containers running simultaneously under the same runtime, demonstrating independent execution.
+
+---
 
 ### 2. Container Listing
 
-![Step2](screenshots/step2.png)
+![Container List](screenshots/Image2.png)
+
+Displays all active containers along with their process details and current state.
+
+---
 
 ### 3. Logging System
 
-![Step3](screenshots/step3.png)
+![Logging](screenshots/Image3.png)
+
+Shows how container output is captured and stored using pipes without affecting the host system.
+
+---
 
 ### 4. CLI Usage
 
-![Step4](screenshots/step4.png)
+![CLI](screenshots/Image4.png)
+
+Demonstrates command-line interaction with the runtime for managing containers.
+
+---
 
 ### 5. Soft Limit Trigger
 
-![Step5](screenshots/step5.png)
+![Soft Limit](screenshots/Image5.png)
 
-### 6. Hard Limit Enforcement
+Shows warning generated when memory usage exceeds the soft limit.
 
-![Step6](screenshots/step6.png)
+---
 
-### 7. CPU Scheduling / Load
+### 6. CPU Scheduling
 
-![Step7](screenshots/step7.png)
+![Scheduling](screenshots/Image7.png)
 
-### 8. Cleanup / Teardown
+Demonstrates difference in execution time based on CPU priority (nice values).
 
-![Step8](screenshots/step8.png)
+---
+
+### 7. Cleanup / Teardown
+
+![Cleanup](screenshots/Image8.png)
+
+Shows proper termination of containers and release of system resources.
+
+---
+
+## Core OS Concepts Demonstrated
+
+### Process Isolation
+
+Containers run in isolated environments and do not interfere with each other.
+
+### Process Management
+
+The runtime manages container creation, execution, and termination.
+
+### Inter-Process Communication
+
+Pipes are used for logging and device file communication is used for kernel interaction.
+
+### Memory Management
+
+Memory is monitored using RSS. Soft limit gives warning and hard limit enforces termination.
+
+### CPU Scheduling
+
+CPU time is distributed based on priority using nice values.
+
+---
+
+## Design Decisions
+
+* Kernel module is used for accurate memory enforcement
+* Pipes are used for simple and efficient logging
+* CLI interface is used for easy control
+* Lightweight design is chosen to focus on OS concepts
+
+---
+
+## Observations
+
+* Containers run independently without interference
+* Memory limits are enforced correctly
+* CPU scheduling behavior matches expectations
+* System remains stable with multiple containers
 
 ---
 
 ## Conclusion
 
-This project demonstrates how container runtimes work internally by combining user-space control with kernel-level monitoring. It provides a simplified understanding of Docker-like systems.
+OS Jackfruit demonstrates how a container runtime works by combining user-space control with kernel-level monitoring. It helps in understanding process isolation, memory management, and scheduling in operating systems.
 
 ---
 
-## 📎 Notes
+## Notes
 
-* Root filesystem and large files are excluded from repository
+* Root filesystem is not included in the repository
 * Tested on Ubuntu VirtualBox environment
+* Requires kernel module support
 
 ---
