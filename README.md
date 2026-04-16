@@ -1,111 +1,167 @@
-# Multi-Container Runtime
+# OS Jackfruit – Lightweight Container Runtime
 
-A lightweight Linux container runtime in C with a long-running supervisor and a kernel-space memory monitor.
+##  Team Members
 
-Read [`project-guide.md`](project-guide.md) for the full project specification.
+* **Your Name**
+* **Teammate Name**
 
 ---
 
-## Getting Started
+##  Project Overview
 
-### 1. Fork the Repository
+OS Jackfruit is a lightweight container runtime implemented in C.
+It demonstrates core operating system concepts such as:
 
-1. Go to [github.com/shivangjhalani/OS-Jackfruit](https://github.com/shivangjhalani/OS-Jackfruit)
-2. Click **Fork** (top-right)
-3. Clone your fork:
+* Process isolation
+* Memory monitoring
+* Resource control using kernel modules
+* Multi-container supervision
 
-```bash
-git clone https://github.com/<your-username>/OS-Jackfruit.git
-cd OS-Jackfruit
+The project consists of a **user-space runtime (`engine.c`)** and a **kernel module (`monitor.c`)** that enforces memory limits.
+
+---
+
+##  Features
+
+* Start and manage multiple containers
+* Track container processes
+* Soft memory limit monitoring (logs warning)
+* Hard memory limit enforcement (kills process)
+* CLI interface for container operations
+* Kernel-level memory tracking using RSS
+
+---
+
+##  Technologies Used
+
+* C Programming
+* Linux Kernel Modules
+* System Calls (`ioctl`, `fork`, `exec`)
+* Ubuntu (Virtual Machine)
+
+---
+
+##  Project Structure
+
+```
+OS-Jackfruit/
+│
+├── boilerplate/
+│   ├── engine.c
+│   ├── monitor.c
+│   ├── monitor_ioctl.h
+│   ├── memory_hog.c
+│   ├── cpu_hog.c
+│   ├── Makefile
+│
+├── screenshots/
+├── README.md
 ```
 
-### 2. Set Up Your VM
+---
 
-You need an **Ubuntu 22.04 or 24.04** VM with **Secure Boot OFF**. WSL will not work.
+##  Modifications Done
 
-Install dependencies:
+### engine.c
 
-```bash
-sudo apt update
-sudo apt install -y build-essential linux-headers-$(uname -r)
+* Fixed struct mismatch for memory limits
+* Removed hardcoded limits
+* Enabled correct ioctl communication
+* Passed user-defined limits to kernel
+
+### monitor.c
+
+* Implemented periodic monitoring using timer
+* Added soft limit logging
+* Implemented hard limit process termination
+* Added debug logs for RSS tracking
+
+### monitor_ioctl.h
+
+* Corrected structure to match kernel and user space
+
+---
+
+##  How to Run
+
+### 1. Compile
+
 ```
-
-### 3. Run the Environment Check
-
-```bash
-cd boilerplate
-chmod +x environment-check.sh
-sudo ./environment-check.sh
-```
-
-Fix any issues reported before moving on.
-
-### 4. Prepare the Root Filesystem
-
-```bash
-mkdir rootfs-base
-wget https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz
-tar -xzf alpine-minirootfs-3.20.3-x86_64.tar.gz -C rootfs-base
-
-# Make one writable copy per container you plan to run
-cp -a ./rootfs-base ./rootfs-alpha
-cp -a ./rootfs-base ./rootfs-beta
-```
-
-Do not commit `rootfs-base/` or `rootfs-*` directories to your repository.
-
-### 5. Understand the Boilerplate
-
-The `boilerplate/` folder contains starter files:
-
-| File                   | Purpose                                             |
-| ---------------------- | --------------------------------------------------- |
-| `engine.c`             | User-space runtime and supervisor skeleton          |
-| `monitor.c`            | Kernel module skeleton                              |
-| `monitor_ioctl.h`      | Shared ioctl command definitions                    |
-| `Makefile`             | Build targets for both user-space and kernel module |
-| `cpu_hog.c`            | CPU-bound test workload                             |
-| `io_pulse.c`           | I/O-bound test workload                             |
-| `memory_hog.c`         | Memory-consuming test workload                      |
-| `environment-check.sh` | VM environment preflight check                      |
-
-Use these as your starting point. You are free to restructure the repository however you want — the submission requirements are listed in the project guide.
-
-### 6. Build and Verify
-
-```bash
-cd boilerplate
 make
 ```
 
-If this compiles without errors, your environment is ready.
+### 2. Load Kernel Module
 
-### 7. GitHub Actions Smoke Check
-
-Your fork will inherit a minimal GitHub Actions workflow from this repository.
-
-That workflow only performs CI-safe checks:
-
-- `make -C boilerplate ci`
-- user-space binary compilation (`engine`, `memory_hog`, `cpu_hog`, `io_pulse`)
-- `./boilerplate/engine` with no arguments must print usage and exit with a non-zero status
-
-The CI-safe build command is:
-
-```bash
-make -C boilerplate ci
+```
+sudo insmod monitor.ko
 ```
 
-This smoke check does not test kernel-module loading, supervisor runtime behavior, or container execution.
+### 3. Create Device File
+
+```
+sudo mknod /dev/container_monitor c <major_number> 0
+sudo chmod 666 /dev/container_monitor
+```
+
+### 4. Run Container
+
+```
+sudo ./engine start test ../rootfs-alpha "./memory_hog 2 1000" --soft-mib 3 --hard-mib 6
+```
+
+### 5. View Logs
+
+```
+dmesg | tail
+```
 
 ---
 
-## What to Do Next
+##  Demonstrations
 
-Read [`project-guide.md`](project-guide.md) end to end. It contains:
+### 1. Multi-container Execution
 
-- The six implementation tasks (multi-container runtime, CLI, logging, kernel monitor, scheduling experiments, cleanup)
-- The engineering analysis you must write
-- The exact submission requirements, including what your `README.md` must contain (screenshots, analysis, design decisions)
+![Step1](screenshots/step1.png)
 
-Your fork's `README.md` should be replaced with your own project documentation as described in the submission package section of the project guide. (As in get rid of all the above content and replace with your README.md)
+### 2. Container Listing
+
+![Step2](screenshots/step2.png)
+
+### 3. Logging System
+
+![Step3](screenshots/step3.png)
+
+### 4. CLI Usage
+
+![Step4](screenshots/step4.png)
+
+### 5. Soft Limit Trigger
+
+![Step5](screenshots/step5.png)
+
+### 6. Hard Limit Enforcement
+
+![Step6](screenshots/step6.png)
+
+### 7. CPU Scheduling / Load
+
+![Step7](screenshots/step7.png)
+
+### 8. Cleanup / Teardown
+
+![Step8](screenshots/step8.png)
+
+---
+
+## Conclusion
+
+This project demonstrates how container runtimes work internally by combining user-space control with kernel-level monitoring. It provides a simplified understanding of Docker-like systems.
+
+---
+
+## 📎 Notes
+
+* Root filesystem and large files are excluded from repository
+* Tested on Ubuntu VirtualBox environment
+
+---
