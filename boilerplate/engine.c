@@ -36,7 +36,7 @@
 #include <unistd.h>
 
 #include "monitor_ioctl.h"
-
+static int cmd_ps(void);
 #define STACK_SIZE (1024 * 1024)
 #define CONTAINER_ID_LEN 32
 #define CONTROL_PATH "/tmp/mini_runtime.sock"
@@ -289,9 +289,25 @@ static void bounded_buffer_begin_shutdown(bounded_buffer_t *buffer)
  */
 int bounded_buffer_push(bounded_buffer_t *buffer, const log_item_t *item)
 {
-    (void)buffer;
-    (void)item;
-    return -1;
+    pthread_mutex_lock(&buffer->mutex);
+
+    while (buffer->count == LOG_BUFFER_CAPACITY && !buffer->shutting_down) {
+        pthread_cond_wait(&buffer->not_full, &buffer->mutex);
+    }
+
+    if (buffer->shutting_down) {
+        pthread_mutex_unlock(&buffer->mutex);
+        return -1;
+    }
+
+    buffer->items[buffer->tail] = *item;
+    buffer->tail = (buffer->tail + 1) % LOG_BUFFER_CAPACITY;
+    buffer->count++;
+
+    pthread_cond_signal(&buffer->not_empty);
+    pthread_mutex_unlock(&buffer->mutex);
+
+    return 0;
 }
 
 /*
@@ -305,9 +321,25 @@ int bounded_buffer_push(bounded_buffer_t *buffer, const log_item_t *item)
  */
 int bounded_buffer_pop(bounded_buffer_t *buffer, log_item_t *item)
 {
-    (void)buffer;
-    (void)item;
-    return -1;
+    pthread_mutex_lock(&buffer->mutex);
+
+    while (buffer->count == 0 && !buffer->shutting_down) {
+        pthread_cond_wait(&buffer->not_empty, &buffer->mutex);
+    }
+
+    if (buffer->count == 0 && buffer->shutting_down) {
+        pthread_mutex_unlock(&buffer->mutex);
+        return -1;
+    }
+
+    *item = buffer->items[buffer->head];
+    buffer->head = (buffer->head + 1) % LOG_BUFFER_CAPACITY;
+    buffer->count--;
+
+    pthread_cond_signal(&buffer->not_full);
+    pthread_mutex_unlock(&buffer->mutex);
+
+    return 0;
 }
 
 /*
@@ -321,7 +353,20 @@ int bounded_buffer_pop(bounded_buffer_t *buffer, log_item_t *item)
  */
 void *logging_thread(void *arg)
 {
-    (void)arg;
+    supervisor_ctx_t *ctx = (supervisor_ctx_t *)arg;
+    log_item_t item;
+
+    while (bounded_buffer_pop(&ctx->log_buffer, &item) == 0) {
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/%s.log", LOG_DIR, item.container_id);
+
+        FILE *f = fopen(path, "a");
+        if (f) {
+            fwrite(item.data, 1, item.length, f);
+            fclose(f);
+        }
+    }
+
     return NULL;
 }
 
@@ -338,8 +383,25 @@ void *logging_thread(void *arg)
  */
 int child_fn(void *arg)
 {
-    (void)arg;
-    return 1;
+    child_config_t *cfg = (child_config_t *)arg;
+
+    // setup log file
+    mkdir("logs", 0755);
+
+    char logfile[100];
+    snprintf(logfile, sizeof(logfile), "logs/%s.log", cfg->id);
+
+    int fd = open(logfile, O_CREAT | O_WRONLY | O_APPEND, 0644);
+
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+
+    // 🔥 RUN REAL COMMAND
+    execl("/bin/sh", "sh", "-c", cfg->command, NULL);
+
+    perror("exec failed");
+    return -1;
 }
 
 int register_with_monitor(int monitor_fd,
@@ -352,8 +414,8 @@ int register_with_monitor(int monitor_fd,
 
     memset(&req, 0, sizeof(req));
     req.pid = host_pid;
-    req.soft_limit_bytes = soft_limit_bytes;
-    req.hard_limit_bytes = hard_limit_bytes;
+    req.soft_limit = soft_limit_bytes;
+    req.hard_limit = hard_limit_bytes;
     strncpy(req.container_id, container_id, sizeof(req.container_id) - 1);
 
     if (ioctl(monitor_fd, MONITOR_REGISTER, &req) < 0)
@@ -419,6 +481,22 @@ static int run_supervisor(const char *rootfs)
      *   4) spawn the logger thread
      *   5) enter the supervisor event loop
      */
+     ctx.monitor_fd = open("/dev/container_monitor", O_RDWR);
+if (ctx.monitor_fd < 0) {
+    perror("monitor open failed");
+}
+
+mkdir(LOG_DIR, 0755);
+
+// start logger thread
+pthread_create(&ctx.logger_thread, NULL, logging_thread, &ctx);
+
+printf("Supervisor running...\n");
+
+while (!ctx.should_stop) {
+    sleep(5);
+    printf("Supervisor alive...\n");
+}
     fprintf(stderr, "Supervisor mode not implemented yet for base-rootfs: %s\n", rootfs);
 
     bounded_buffer_begin_shutdown(&ctx.log_buffer);
@@ -437,10 +515,109 @@ static int run_supervisor(const char *rootfs)
  */
 static int send_control_request(const control_request_t *req)
 {
-    (void)req;
-    fprintf(stderr, "Control-plane client path not implemented.\n");
-    return 1;
+    if (req->kind == CMD_START || req->kind == CMD_RUN) {
+
+        mkdir("logs", 0755);
+
+        // create log file
+        char logfile[100];
+        snprintf(logfile, sizeof(logfile), "logs/%s.log", req->container_id);
+
+        int log_fd = open(logfile, O_CREAT | O_WRONLY | O_APPEND, 0644);
+
+        // create pipe (optional, not used now but safe)
+        int pipefd[2];
+        pipe(pipefd);
+
+        child_config_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+
+        strcpy(cfg.id, req->container_id);
+        strcpy(cfg.rootfs, req->rootfs);
+        strcpy(cfg.command, req->command);
+        cfg.log_write_fd = log_fd;
+
+        void *stack = malloc(STACK_SIZE);
+
+        pid_t pid = clone(child_fn,
+                          stack + STACK_SIZE,
+                          SIGCHLD,
+                          &cfg);
+
+        if (pid < 0) {
+            perror("clone failed");
+            return 1;
+        }
+
+        printf("Container %s started with PID %d\n", req->container_id, pid);
+        int fd = open("/dev/container_monitor", O_RDWR);
+if (fd < 0) {
+    perror("open monitor device");
+} else {
+    struct monitor_request mreq;
+
+    memset(&mreq, 0, sizeof(mreq));
+    strncpy(mreq.container_id, req->container_id, sizeof(mreq.container_id)-1);
+
+    mreq.pid = pid;
+
+    // default limits (you can change)
+    mreq.soft_limit = req->soft_limit_bytes;
+    mreq.hard_limit = req->hard_limit_bytes;
+
+    if (ioctl(fd, MONITOR_REGISTER, &mreq) < 0) {
+        perror("ioctl register failed");
+    }
+
+    close(fd);
 }
+
+        // save PID
+        char pidfile[100];
+        snprintf(pidfile, sizeof(pidfile), "logs/%s.pid", req->container_id);
+
+        FILE *f = fopen(pidfile, "w");
+        if (f) {
+            fprintf(f, "%d\n", pid);
+            fclose(f);
+        }
+
+        close(log_fd);
+    }
+
+    if (req->kind == CMD_PS) {
+        cmd_ps();
+    }
+
+    if (req->kind == CMD_LOGS) {
+        char cmd[100];
+        snprintf(cmd, sizeof(cmd), "cat logs/%s.log", req->container_id);
+        system(cmd);
+    }
+
+    if (req->kind == CMD_STOP) {
+        char pidfile[100];
+        snprintf(pidfile, sizeof(pidfile), "logs/%s.pid", req->container_id);
+
+        FILE *f = fopen(pidfile, "r");
+        if (!f) {
+            printf("Container not found\n");
+            return 1;
+        }
+
+        int pid;
+        fscanf(f, "%d", &pid);
+        fclose(f);
+
+        kill(pid, SIGKILL);
+
+        printf("Container %s stopped\n", req->container_id);
+    }
+
+    return 0;
+}
+
+       
 
 static int cmd_start(int argc, char *argv[])
 {
@@ -494,24 +671,54 @@ static int cmd_run(int argc, char *argv[])
 
 static int cmd_ps(void)
 {
-    control_request_t req;
+    FILE *fp;
+    char path[256];
 
-    memset(&req, 0, sizeof(req));
-    req.kind = CMD_PS;
+    printf("ID\tPID\tSTATE\n");
 
-    /*
-     * TODO:
-     * The supervisor should respond with container metadata.
-     * Keep the rendering format simple enough for demos and debugging.
-     */
-    printf("Expected states include: %s, %s, %s, %s, %s\n",
-           state_to_string(CONTAINER_STARTING),
-           state_to_string(CONTAINER_RUNNING),
-           state_to_string(CONTAINER_STOPPED),
-           state_to_string(CONTAINER_KILLED),
-           state_to_string(CONTAINER_EXITED));
-    return send_control_request(&req);
+    // get all pid files
+    fp = popen("ls logs | grep .pid", "r");
+    if (!fp) {
+        printf("No containers found\n");
+        return 0;
+    }
+
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        char id[64];
+        int pid;
+
+        // remove newline
+        path[strcspn(path, "\n")] = 0;
+
+        // extract id (alpha.pid -> alpha)
+        if (sscanf(path, "%[^.].pid", id) != 1)
+            continue;
+
+        char pidfile[256];
+        snprintf(pidfile, sizeof(pidfile), "logs/%s.pid", id);
+
+        FILE *pf = fopen(pidfile, "r");
+        if (!pf)
+            continue;
+
+        fscanf(pf, "%d", &pid);
+        fclose(pf);
+
+        // check using /proc (BEST METHOD)
+        char proc_path[64];
+        snprintf(proc_path, sizeof(proc_path), "/proc/%d", pid);
+
+        if (access(proc_path, F_OK) == 0)
+            printf("%s\t%d\trunning\n", id, pid);
+        else
+            printf("%s\t%d\tstopped\n", id, pid);
+    }
+
+    pclose(fp);
+    return 0;
 }
+
+    
 
 static int cmd_logs(int argc, char *argv[])
 {

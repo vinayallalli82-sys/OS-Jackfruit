@@ -1,4 +1,6 @@
+
 obj-m += monitor.o
+ccflags-y += -I$(PWD)
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)

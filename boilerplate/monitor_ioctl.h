@@ -9,12 +9,14 @@
 #include <sys/types.h>
 #endif
 
-#define MONITOR_NAME_LEN 32
+
+
+#define MONITOR_NAME_LEN 64
 
 struct monitor_request {
     pid_t pid;
-    unsigned long soft_limit_bytes;
-    unsigned long hard_limit_bytes;
+    unsigned long soft_limit;
+    unsigned long hard_limit;
     char container_id[MONITOR_NAME_LEN];
 };
 
