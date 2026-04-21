@@ -1,27 +1,17 @@
 #ifndef MONITOR_IOCTL_H
 #define MONITOR_IOCTL_H
 
-#ifdef __KERNEL__
 #include <linux/ioctl.h>
-#include <linux/types.h>
-#else
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#endif
 
+#define DEVICE_FILE "/dev/container_monitor"
 
-
-#define MONITOR_NAME_LEN 64
-
-struct monitor_request {
+struct container_info {
+    char id[32];
     pid_t pid;
-    unsigned long soft_limit;
-    unsigned long hard_limit;
-    char container_id[MONITOR_NAME_LEN];
+    size_t soft_limit;
+    size_t hard_limit;
 };
 
-#define MONITOR_MAGIC 'M'
-#define MONITOR_REGISTER _IOW(MONITOR_MAGIC, 1, struct monitor_request)
-#define MONITOR_UNREGISTER _IOW(MONITOR_MAGIC, 2, struct monitor_request)
+#define IOCTL_REGISTER _IOW('a', 'a', struct container_info)
 
 #endif
